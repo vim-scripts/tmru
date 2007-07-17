@@ -3,37 +3,70 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2007-05-12.
-" @Revision:    0.2.106
+" @Last Change: 2007-07-01.
+" @Revision:    0.3.161
+" GetLatestVimScripts: 1864 1 :AutoInstall: tmru.vim
 
 if &cp || exists("loaded_tmru")
     finish
 endif
-if !exists('loaded_tlib') || loaded_tlib < 4
-    echoerr "tlib >= 0.4 is required"
+if !exists('loaded_tlib') || loaded_tlib < 9
+    echoerr "tlib >= 0.9 is required"
     finish
 endif
-let loaded_tmru = 2
+let loaded_tmru = 3
 
-if !exists("g:tmruSize")    | let g:tmruSize = 50        | endif "{{{2
-if !exists("g:TMRU")        | let g:TMRU = ''            | endif "{{{2
+if !exists("g:tmruSize")     | let g:tmruSize = 50           | endif "{{{2
+if !exists("g:tmruMenu")     | let g:tmruMenu = 'File.M&RU.' | endif "{{{2
+if !exists("g:tmruMenuSize") | let g:tmruMenuSize = 20       | endif "{{{2
+if !exists("g:TMRU")         | let g:TMRU = ''               | endif "{{{2
+
 if !exists("g:tmruExclude") "{{{2
-    let g:tmruExclude = '/te\?mp/\|vim.\{-}/doc\|'.
+    let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)\|'.
                 \ substitute(escape(&suffixes, '~.*$^'), ',', '$\\|', 'g') .'$'
 endif
+
 if !exists("g:tmru_ignorecase") "{{{2
     let g:tmru_ignorecase = !has('fname_case')
 endif
 
-fun! s:MruRetrieve()
+if !exists('g:tmru_handlers')
+    let g:tmru_handlers = [
+                \ {'key': 3,  'agent': 'tlib#agent#CopyItems',          'key_name': '<c-c>', 'help': 'Copy file name(s)'},
+                \ {'key': 19, 'agent': 'tlib#agent#EditFileInSplit',    'key_name': '<c-s>', 'help': 'Edit files (split)'},
+                \ {'key': 22, 'agent': 'tlib#agent#EditFileInVSplit',   'key_name': '<c-v>', 'help': 'Edit files (vertical split)'},
+                \ {'key': 20, 'agent': 'tlib#agent#EditFileInTab',      'key_name': '<c-t>', 'help': 'Edit files (new tab)'},
+                \ {'display_format': 'filename'},
+                \ ]
+endif
+
+function! s:BuildMenu(initial) "{{{3
+    if !empty(g:tmruMenu)
+        if !a:initial
+            silent! exec 'aunmenu '. g:tmruMenu
+        endif
+        let es = s:MruRetrieve()
+        if g:tmruMenuSize > 0 && len(es) > g:tmruMenuSize
+            let es = es[0 : g:tmruMenuSize - 1]
+        endif
+        for e in es
+            let me = escape(e, '.\ ')
+            exec 'amenu '. g:tmruMenu . me .' :call <SID>Edit('. string(e) .')<cr>'
+        endfor
+    endif
+endf
+
+function! s:MruRetrieve()
     return split(g:TMRU, '\n')
 endf
 
-fun! s:MruStore(mru)
+function! s:MruStore(mru)
     let g:TMRU = join(a:mru, "\n")
+    call s:BuildMenu(0)
 endf
 
-fun! s:MruRegister(fname)
+function! s:MruRegister(fname)
+    " TLogVAR a:fname
     if g:tmruExclude != '' && a:fname =~ g:tmruExclude
         return
     endif
@@ -49,36 +82,39 @@ fun! s:MruRegister(fname)
     call s:MruStore(tmru)
 endf
 
-fun! s:SNR()
+function! s:SNR()
     return matchstr(expand('<sfile>'), '<SNR>\d\+_\zeSNR$')
 endf
 
-fun! s:AgentCopy(world, selected)
-    let @* = join(a:selected, "\n")
-    let a:world.state = 'redisplay'
-    return a:world
+function! s:Edit(filename) "{{{3
+    if a:filename == expand('%:p')
+        return 1
+    else
+        let bn = bufnr(a:filename)
+        " TLogVAR bn
+        if bn != -1 && buflisted(bn)
+            exec 'buffer '. bn
+            return 1
+        elseif filereadable(a:filename)
+            exec 'edit '. escape(a:filename, '%#\ ')
+            return 1
+        endif
+    endif
+    return 0
 endf
 
-fun! s:SelectMRU()
+function! s:SelectMRU()
     let tmru = s:MruRetrieve()
-    let bs   = tlib#InputList('m', 'Select file', copy(tmru), [
-                \ {'key': 3, 'agent': s:SNR() .'AgentCopy', 'key_name': '<c-c>', 'help': 'Copy file name(s)'},
-                \ {'display_format': 'filename'},
-                \ ])
+    let bs   = tlib#input#List('m', 'Select file', copy(tmru), g:tmru_handlers)
     " TLogVAR bs
     if !empty(bs)
         for bf in bs
-            if bf != expand('%:p')
-                let bn = bufnr(bf)
-                if bn != -1 && buflisted(bn)
-                    exec 'buffer '. bn
-                elseif filereadable(bf)
-                    exec 'edit '. escape(bf, '%#\ ')
-                else
-                    let bi = index(tmru, bf)
-                    call remove(tmru, bi)
-                    call s:MruStore(tmru)
-                endif
+            " TLogVAR bf
+            if !s:Edit(bf)
+                let bi = index(tmru, bf)
+                " TLogVAR bi
+                call remove(tmru, bi)
+                call s:MruStore(tmru)
             endif
         endfor
         return 1
@@ -86,16 +122,24 @@ fun! s:SelectMRU()
     return 0
 endf
 
-fun! s:EditMRU()
+function! s:EditMRU()
     let tmru = s:MruRetrieve()
-    let tmru = tlib#EditList('Edit MRU', tmru)
+    let tmru = tlib#input#EditList('Edit MRU', tmru)
     call s:MruStore(tmru)
 endf
 
+function! s:AutoMRU(filename) "{{{3
+    " if &buftype !~ 'nofile' && fnamemodify(a:filename, ":t") != '' && filereadable(fnamemodify(a:filename, ":t"))
+    if &buftype !~ 'nofile' && fnamemodify(a:filename, ":t") != ''
+        call s:MruRegister(a:filename)
+    endif
+endf
+
+
 augroup tmru
     au!
-    au BufWritePost * if &buftype !~ 'nofile' && expand("<afile>:t") != '' | call s:MruRegister(expand("<afile>:p")) | endif
-    au BufReadPost *  if &buftype !~ 'nofile' && expand("<afile>:t") != '' | call s:MruRegister(expand("<afile>:p")) | endif
+    au VimEnter * call s:BuildMenu(1)
+    au BufWritePost,BufReadPost * call s:AutoMRU(expand("%:p"))
 augroup END
 
 command! TRecentlyUsedFiles call s:SelectMRU()
@@ -104,8 +148,13 @@ command! TRecentlyUsedFilesEdit call s:EditMRU()
 
 finish
 
-This plugin provides a simple most recently files facility. It was 
-originally rather a by-product of tlib (vimscript #1863).
+This plugin provides a simple most recently files facility.
+
+It was originally rather a by-product of tlib (vimscript #1863) and uses 
+its tlib#input#List() function. This function allows quickly selecting a 
+buffer by typing some part of the name (which will actually filter the 
+list until only one item is left), the number, or by clicking with the 
+mouse on the entry.
 
 :TRecentlyUsedFiles ... open one or more recently used file(s)
 
@@ -123,4 +172,10 @@ Initial release
 - <c-c> copy file name(s) (to @*)
 - When !has('fname_case'), ignore case when checking if a filename is 
 already registered.
+
+0.3
+- Autocmds use expand('%') instead of expand('<afile>')
+- Build menu (if the prefix g:tmruMenu isn't empty)
+- Key shortcuts to open files in (vertically) split windows or tabs
+- Require tlib >= 0.9
 
