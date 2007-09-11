@@ -1,20 +1,20 @@
 " tmru.vim -- Most Recently Used Files
-" @Author:      Thomas Link (mailto:samul AT web de?subject=vim-tlib-mru)
+" @Author:      Thomas Link (mailto:micathom AT gmail com?subject=vim-tlib-mru)
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2007-07-01.
-" @Revision:    0.3.161
-" GetLatestVimScripts: 1864 1 :AutoInstall: tmru.vim
+" @Last Change: 2007-09-11.
+" @Revision:    0.4.185
+" GetLatestVimScripts: 1864 1 tmru.vim
 
 if &cp || exists("loaded_tmru")
     finish
 endif
-if !exists('loaded_tlib') || loaded_tlib < 9
-    echoerr "tlib >= 0.9 is required"
+if !exists('loaded_tlib') || loaded_tlib < 13
+    echoerr "tlib >= 0.13 is required"
     finish
 endif
-let loaded_tmru = 3
+let loaded_tmru = 4
 
 if !exists("g:tmruSize")     | let g:tmruSize = 50           | endif "{{{2
 if !exists("g:tmruMenu")     | let g:tmruMenu = 'File.M&RU.' | endif "{{{2
@@ -22,7 +22,7 @@ if !exists("g:tmruMenuSize") | let g:tmruMenuSize = 20       | endif "{{{2
 if !exists("g:TMRU")         | let g:TMRU = ''               | endif "{{{2
 
 if !exists("g:tmruExclude") "{{{2
-    let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)\|'.
+    let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)/\|'.
                 \ substitute(escape(&suffixes, '~.*$^'), ',', '$\\|', 'g') .'$'
 endif
 
@@ -30,15 +30,23 @@ if !exists("g:tmru_ignorecase") "{{{2
     let g:tmru_ignorecase = !has('fname_case')
 endif
 
-if !exists('g:tmru_handlers')
-    let g:tmru_handlers = [
-                \ {'key': 3,  'agent': 'tlib#agent#CopyItems',          'key_name': '<c-c>', 'help': 'Copy file name(s)'},
-                \ {'key': 19, 'agent': 'tlib#agent#EditFileInSplit',    'key_name': '<c-s>', 'help': 'Edit files (split)'},
-                \ {'key': 22, 'agent': 'tlib#agent#EditFileInVSplit',   'key_name': '<c-v>', 'help': 'Edit files (vertical split)'},
-                \ {'key': 20, 'agent': 'tlib#agent#EditFileInTab',      'key_name': '<c-t>', 'help': 'Edit files (new tab)'},
-                \ {'display_format': 'filename'},
-                \ ]
+if !exists('g:tmru_world') "{{{2
+    let g:tmru_world = tlib#World#New({
+                \ 'type': 'm',
+                \ 'key_handlers': [
+                \ {'key': 3,  'agent': 'tlib#agent#CopyItems',        'key_name': '<c-c>', 'help': 'Copy file name(s)'},
+                \ {'key': 9,  'agent': 'tlib#agent#ShowInfo',         'key_name': '<c-i>', 'help': 'Show info'},
+                \ {'key': 19, 'agent': 'tlib#agent#EditFileInSplit',  'key_name': '<c-s>', 'help': 'Edit files (split)'},
+                \ {'key': 22, 'agent': 'tlib#agent#EditFileInVSplit', 'key_name': '<c-v>', 'help': 'Edit files (vertical split)'},
+                \ {'key': 20, 'agent': 'tlib#agent#EditFileInTab',    'key_name': '<c-t>', 'help': 'Edit files (new tab)'},
+                \ {'key': 23, 'agent': 'tlib#agent#ViewFile',         'key_name': '<c-w>', 'help': 'View file in window'},
+                \ ],
+                \ 'allow_suspend': 0,
+                \ 'query': 'Select file',
+                \ })
+    call g:tmru_world.Set_display_format('filename')
 endif
+
 
 function! s:BuildMenu(initial) "{{{3
     if !empty(g:tmruMenu)
@@ -104,8 +112,11 @@ function! s:Edit(filename) "{{{3
 endf
 
 function! s:SelectMRU()
-    let tmru = s:MruRetrieve()
-    let bs   = tlib#input#List('m', 'Select file', copy(tmru), g:tmru_handlers)
+    let tmru  = s:MruRetrieve()
+    let world = copy(g:tmru_world)
+    let world.base = copy(tmru)
+    " let bs    = tlib#input#List('m', 'Select file', copy(tmru), g:tmru_handlers)
+    let bs    = tlib#input#ListW(world)
     " TLogVAR bs
     if !empty(bs)
         for bf in bs
@@ -178,4 +189,9 @@ already registered.
 - Build menu (if the prefix g:tmruMenu isn't empty)
 - Key shortcuts to open files in (vertically) split windows or tabs
 - Require tlib >= 0.9
+
+0.4
+- <c-w> ... View file in original window
+- <c-i> ... Show file info
+- Require tlib >= 0.13
 
