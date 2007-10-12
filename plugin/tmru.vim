@@ -1,10 +1,10 @@
 " tmru.vim -- Most Recently Used Files
-" @Author:      Thomas Link (mailto:micathom AT gmail com?subject=vim-tlib-mru)
+" @Author:      Thomas Link (micathom AT gmail com?subject=vim-tlib-mru)
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2007-09-11.
-" @Revision:    0.4.185
+" @Last Change: 2007-10-13.
+" @Revision:    0.4.191
 " GetLatestVimScripts: 1864 1 tmru.vim
 
 if &cp || exists("loaded_tmru")
@@ -104,7 +104,13 @@ function! s:Edit(filename) "{{{3
             exec 'buffer '. bn
             return 1
         elseif filereadable(a:filename)
-            exec 'edit '. escape(a:filename, '%#\ ')
+            try
+                exec 'edit '. tlib#arg#Ex(a:filename)
+            catch
+                echohl error
+                echom v:errmsg
+                echohl NONE
+            endtry
             return 1
         endif
     endif
@@ -194,4 +200,7 @@ already registered.
 - <c-w> ... View file in original window
 - <c-i> ... Show file info
 - Require tlib >= 0.13
+
+0.5
+- Don't escape backslashes for :edit
 
