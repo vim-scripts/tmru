@@ -3,31 +3,49 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2007-10-13.
-" @Revision:    0.4.191
+" @Last Change: 2008-11-26.
+" @Revision:    0.6.228
 " GetLatestVimScripts: 1864 1 tmru.vim
 
 if &cp || exists("loaded_tmru")
     finish
 endif
-if !exists('loaded_tlib') || loaded_tlib < 13
-    echoerr "tlib >= 0.13 is required"
+if !exists('loaded_tlib') || loaded_tlib < 28
+    echoerr "tlib >= 0.28 is required"
     finish
 endif
-let loaded_tmru = 4
+let loaded_tmru = 6
 
-if !exists("g:tmruSize")     | let g:tmruSize = 50           | endif "{{{2
-if !exists("g:tmruMenu")     | let g:tmruMenu = 'File.M&RU.' | endif "{{{2
-if !exists("g:tmruMenuSize") | let g:tmruMenuSize = 20       | endif "{{{2
-if !exists("g:TMRU")         | let g:TMRU = ''               | endif "{{{2
+if !exists("g:tmruSize")
+    " The number of recently edited files that are registered.
+    let g:tmruSize = 50 "{{{2
+endif
+if !exists("g:tmruMenu")
+    " The prefix for the menu. Set to "" in order to disable the menu.
+    let g:tmruMenu = 'File.M&RU.' "{{{2
+endif
+if !exists("g:tmruMenuSize")
+    " The number of recently edited files that are displayed in the menu.
+    let g:tmruMenuSize = 20 "{{{2
+endif
+if !exists("g:tmruEvents")
+    " A comma-separated list of events that trigger buffer registration.
+    let g:tmruEvents = 'BufWritePost,BufReadPost' "{{{2
+endif
+if !exists("g:TMRU")
+    let g:TMRU = ''
+endif
 
 if !exists("g:tmruExclude") "{{{2
-    let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)/\|'.
+    " :read: let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)/\|__.\{-}__$' "{{{2
+    " Ignore files matching this regexp.
+    let g:tmruExclude = '/te\?mp/\|vim.\{-}/\(doc\|cache\)/\|__.\{-}__$\|'.
                 \ substitute(escape(&suffixes, '~.*$^'), ',', '$\\|', 'g') .'$'
 endif
 
-if !exists("g:tmru_ignorecase") "{{{2
-    let g:tmru_ignorecase = !has('fname_case')
+if !exists("g:tmru_ignorecase")
+    " If true, ignore case when comparing filenames.
+    let g:tmru_ignorecase = !has('fname_case') "{{{2
 endif
 
 if !exists('g:tmru_world') "{{{2
@@ -44,6 +62,7 @@ if !exists('g:tmru_world') "{{{2
                 \ 'allow_suspend': 0,
                 \ 'query': 'Select file',
                 \ })
+                " \ 'filter_format': 'fnamemodify(%s, ":t")',
     call g:tmru_world.Set_display_format('filename')
 endif
 
@@ -112,6 +131,8 @@ function! s:Edit(filename) "{{{3
                 echohl NONE
             endtry
             return 1
+        else
+            echom "TMRU: File not readable: ". a:filename
         endif
     endif
     return 0
@@ -147,7 +168,7 @@ endf
 
 function! s:AutoMRU(filename) "{{{3
     " if &buftype !~ 'nofile' && fnamemodify(a:filename, ":t") != '' && filereadable(fnamemodify(a:filename, ":t"))
-    if &buftype !~ 'nofile' && fnamemodify(a:filename, ":t") != ''
+    if &buflisted && &buftype !~ 'nofile' && fnamemodify(a:filename, ":t") != ''
         call s:MruRegister(a:filename)
     endif
 endf
@@ -156,27 +177,17 @@ endf
 augroup tmru
     au!
     au VimEnter * call s:BuildMenu(1)
-    au BufWritePost,BufReadPost * call s:AutoMRU(expand("%:p"))
+    exec 'au '. g:tmruEvents .' * call s:AutoMRU(expand("<afile>:p"))'
 augroup END
 
+" Display the MRU list.
 command! TRecentlyUsedFiles call s:SelectMRU()
+
+" Edit the MRU list.
 command! TRecentlyUsedFilesEdit call s:EditMRU()
 
 
 finish
-
-This plugin provides a simple most recently files facility.
-
-It was originally rather a by-product of tlib (vimscript #1863) and uses 
-its tlib#input#List() function. This function allows quickly selecting a 
-buffer by typing some part of the name (which will actually filter the 
-list until only one item is left), the number, or by clicking with the 
-mouse on the entry.
-
-:TRecentlyUsedFiles ... open one or more recently used file(s)
-
-This plugin relies on the 'viminfo' option to contain ! in order 
-to save the files list.
 
 
 CHANGES:
@@ -203,4 +214,8 @@ already registered.
 
 0.5
 - Don't escape backslashes for :edit
+
+0.6
+- g:tmruEvents can be configured (eg. BufEnter)
+- Require tlib 0.28
 
