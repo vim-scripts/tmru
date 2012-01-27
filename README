@@ -1,6 +1,8 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=1864
 
-This plugin provides a simple most recently used files facility.
+This plugin provides a simple most recently used files facility. Users 
+can use patterns to filter the file list. Users can open multiple files 
+at once.
 
 :TRecentlyUsedFiles ... open one or more recently used file(s)
 :TRecentlyUsedFilesEdit ... edit the mru list
@@ -8,3 +10,4 @@ This plugin provides a simple most recently used files facility.
 If viminfo contains "!", the data is stored as global variable. Otherwise,
 tlib#cache is used -- which saves the data in ${vimfiles}/cache/tmru/files
 by default.
+
