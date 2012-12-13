@@ -1,13 +1,23 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=1864
 
-This plugin provides a simple most recently used files facility. Users 
-can use patterns to filter the file list. Users can open multiple files 
-at once.
+This plugin allows users to open recently used files. Users can filter 
+the file list by typing a pattern. Users can open multiple files at 
+once. The list of recently used files is synchronized across multiple 
+instances of (g)vim running simultaneously.
+
+By default, tmru will remember 500 files (accessible via the 
+:TRecentlyUsedFiles command). The list can be easily filtered (users 
+can optionally use fuzzy patterns, which is not enabled by default though).
+
+Files can be groups in sessions:
+
+     - Use named sessions to group files that are frequently edited together
+     - Use numbered sessions to open files you edited during one of the latest editing sessions
+
+Files can be marked as "sticky" -- they will never be removed from the list.
+
+Commands:
 
 :TRecentlyUsedFiles ... open one or more recently used file(s)
 :TRecentlyUsedFilesEdit ... edit the mru list
-
-If viminfo contains "!", the data is stored as global variable. Otherwise,
-tlib#cache is used -- which saves the data in ${vimfiles}/cache/tmru/files
-by default.
 

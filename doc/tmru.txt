@@ -1,19 +1,16 @@
 *tmru.txt*  Most Recently Used Files
             Author: Tom Link, micathom at gmail com
 
-This plugin provides a simple most recently files facility.
-
-It was originally rather a by-product of tlib (vimscript #1863) and uses 
-its tlib#input#List() function. This function allows quickly selecting a 
-buffer by typing some part of the name (which will actually filter the 
-list until only one item is left), the number, or by clicking with the 
-mouse on the entry.
+This plugin provides a simple most recently used files facility. Users 
+can use patterns to filter the file list. Users can open multiple files 
+at once.
 
 :TRecentlyUsedFiles ... open one or more recently used file(s)
+:TRecentlyUsedFilesEdit ... edit the mru list
 
-If the 'viminfo' option contains !, then viminfo will be used to save 
-the filelist. Otherwise the list will be saved in 
-~/viminfo/cache/tmru/files.
+If viminfo contains "!", the data is stored as global variable. Otherwise,
+tlib#cache is used -- which saves the data in ${vimfiles}/cache/tmru/files
+by default.
 
 By default tmru matches the search pattern on the full filename. If 
 you want to match on the basename, add the following to 
@@ -48,25 +45,27 @@ Suggested maps (to be set in ~/.vimrc): >
 ========================================================================
 Contents~
 
-        g:tmruSize ................ |g:tmruSize|
-        g:tmruMenu ................ |g:tmruMenu|
-        g:tmruMenuSize ............ |g:tmruMenuSize|
-        g:tmruEvents .............. |g:tmruEvents|
-        g:tmru_file ............... |g:tmru_file|
-        g:tmruExclude ............. |g:tmruExclude|
-        g:tmru_ignorecase ......... |g:tmru_ignorecase|
-        g:tmru_check_disk ......... |g:tmru_check_disk|
-        TmruEdit .................. |TmruEdit()|
-        :TRecentlyUsedFiles ....... |:TRecentlyUsedFiles|
-        :TRecentlyUsedFilesEdit ... |:TRecentlyUsedFilesEdit|
+        g:tmruMenu ......................... |g:tmruMenu|
+        g:tmruMenuSize ..................... |g:tmruMenuSize|
+        g:tmru_sessions .................... |g:tmru_sessions|
+        g:tmru#display_relative_filename ... |g:tmru#display_relative_filename|
+        g:tmru_single_instance_mode ........ |g:tmru_single_instance_mode|
+        g:tmru_update_viminfo .............. |g:tmru_update_viminfo|
+        g:tmru_events ...................... |g:tmru_events|
+        g:tmru_file ........................ |g:tmru_file|
+        g:tmruSize ......................... |g:tmruSize|
+        g:tmruExclude ...................... |g:tmruExclude|
+        g:tmru_ignorecase .................. |g:tmru_ignorecase|
+        g:tmru_check_disk .................. |g:tmru_check_disk|
+        TmruObj ............................ |TmruObj()|
+        :TRecentlyUsedFiles ................ |:TRecentlyUsedFiles|
+        :TMRU .............................. |:TMRU|
+        :TRecentlyUsedFilesEdit ............ |:TRecentlyUsedFilesEdit|
+        :TRecentlyUsedFilesSessions ........ |:TRecentlyUsedFilesSessions|
 
 
 ========================================================================
 plugin/tmru.vim~
-
-                                                    *g:tmruSize*
-g:tmruSize                     (default: 50)
-    The number of recently edited files that are registered.
 
                                                     *g:tmruMenu*
 g:tmruMenu                     (default: 'File.M&RU.')
@@ -77,19 +76,54 @@ g:tmruMenuSize                 (default: 20)
     The number of recently edited files that are displayed in the 
     menu.
 
-                                                    *g:tmruEvents*
-g:tmruEvents                   (default: {'BufWritePost': 1, 'BufReadPost': 1, 'BufWinEnter': 0, 'BufEnter': 0, 'BufDelete': 0})
-    A dictionary of {EVENT: SAVE}. If SAVE evaluates to true, the list is 
-    saved for those |{event}|.
-    
-    Old format: A comma-separated list of events that trigger buffer 
-    registration.
+                                                    *g:tmru_sessions*
+g:tmru_sessions                (default: 9)
+    If greater than zero, make tmru to save the file list opened when 
+    closing vim. Save at most information for N sessions.
+
+    Setting this variable to 0, disables this feature.
+
+    This variable must be set before starting vim.
+
+                                                    *g:tmru#display_relative_filename*
+g:tmru#display_relative_filename (default: 0)
+    If true, display the relative filename. This requires 
+    |g:tlib#input#format_filename| to be set to "r".
+
+                                                    *g:tmru_single_instance_mode*
+g:tmru_single_instance_mode    (default: 0)
+    If true, work as if only one instance of vim is running. This 
+    results in reading and writing the mru list less frequently 
+    from/to disk. The list won't be synchronized across multiple 
+    instances of vim running in parallel.
+
+                                                    *g:tmru_update_viminfo*
+g:tmru_update_viminfo          (default: !g:tmru_single_instance_mode)
+    If true, load and save the viminfo file on certain events -- see 
+    |g:tmru_events|.
+    This is useful if 'viminfo' includes '!' and |g:tmru_file| is 
+    empty and you run multiple instances of vim.
+
+                                                    *g:tmru_events*
+g:tmru_events                  (default: {...})
+    A dictionary of {EVENT: ACTION = BOOL, ...}, where ACTION is one 
+    of the following:
+
+    load ....... Load the external representation from disk
+    register ... Register the current buffer
+    save ....... Save mru list to disk (currently ignored)
+
 
                                                     *g:tmru_file*
-g:tmru_file                    (default: tlib#cache#Filename('tmru', 'files', 1))
+g:tmru_file                    (default: tlib#persistent#Filename('tmru', 'files', 1))
     Where to save the file list. The default value is only 
     effective, if 'viminfo' doesn't contain '!' -- in which case 
     the 'viminfo' will be used.
+
+                                                    *g:tmruSize*
+g:tmruSize                     (default: empty(g:tmru_file) ? 50 : 500)
+    The number of recently edited files that are registered.
+    The size is smaller if viminfo is used (see |g:tmru_file|).
 
                                                     *g:tmruExclude*
 g:tmruExclude                  (default: '/te\?mp/\|vim.\{-}/\(doc\|cache\)/\|__.\{-}__$')
@@ -102,22 +136,29 @@ g:tmru_ignorecase              (default: !has('fname_case'))
                                                     *g:tmru_check_disk*
 g:tmru_check_disk              (default: 1)
     If TRUE, allow disk checks when adding files to the list by 
-    means of a registered event (see |g:tmruEvents|).
+    means of a registered event (see |g:tmru_events|).
     This may cause annoying slow-downs in certain settings. In this 
     case, set this variable to 0 in your |vimrc| file.
 
-                                                    *TmruEdit()*
-TmruEdit(filename)
-    Return 0 if the file isn't readable/doesn't exist.
-    Otherwise return 1.
+                                                    *TmruObj()*
+TmruObj(...)
 
                                                     *:TRecentlyUsedFiles*
 :TRecentlyUsedFiles
     Display the MRU list.
 
+                                                    *:TMRU*
+:TMRU
+    Alias for |:TRecentlyUsedFiles|.
+
                                                     *:TRecentlyUsedFilesEdit*
 :TRecentlyUsedFilesEdit
     Edit the MRU list.
+
+                                                    *:TRecentlyUsedFilesSessions*
+:TRecentlyUsedFilesSessions
+    Open files from a previous session (see |g:tmru_sessions|).
+    This command is only available if g:tmru_sessions > 0.
 
 
 
