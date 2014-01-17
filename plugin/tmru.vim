@@ -3,18 +3,18 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2012-11-30.
-" @Revision:    854
+" @Last Change: 2014-01-16.
+" @Revision:    901
 " GetLatestVimScripts: 1864 1 tmru.vim
 
 if &cp || exists("loaded_tmru")
     finish
 endif
-if !exists('loaded_tlib') || loaded_tlib < 104
-    echoerr "tlib >= 1.04 is required"
+if !exists('loaded_tlib') || loaded_tlib < 106
+    echoerr "tlib >= 1.06 is required"
     finish
 endif
-let loaded_tmru = 100
+let loaded_tmru = 102
 
 
 if !exists("g:tmruMenu")
@@ -32,7 +32,7 @@ endif
 
 if !exists('g:tmru_sessions')
     " If greater than zero, make tmru to save the file list opened when 
-    " closing vim. Save at most information for N sessions.
+    " closing vim. Save at most information for the N latest sessions.
     "
     " Setting this variable to 0, disables this feature.
     "
@@ -155,28 +155,56 @@ if !exists('g:tmru_check_disk')
 endif
 
 
-function! TmruObj(...) "{{{3
-    let tmruobj = {}
-    function! tmruobj.Update(...) dict
-        let self.mru = call(function('s:MruRetrieve'), a:000)
-    endf
-    function! tmruobj.GetFilenames() dict
-        return map(copy(self.mru), 'v:val[0]')
-    endf
-    function! tmruobj.Save(...) dict
-        return call(function('s:MruStore'), [self.mru] + a:000)
-    endf
-    function! tmruobj.SetBase(world) dict
-        let a:world.base = self.GetFilenames()
-        if g:tmru#display_relative_filename
-            let basedir = expand('%:p:h')
-            call map(a:world.base, 'tlib#file#Relative(v:val, basedir)')
+let s:tmruobj_prototype = {}
+
+function! s:tmruobj_prototype.Update(...) dict
+    let self.mru = call(function('s:MruRetrieve'), a:000)
+endf
+
+function! s:tmruobj_prototype.GetFilenames() dict
+    return map(copy(self.mru), 'v:val[0]')
+endf
+
+function! s:tmruobj_prototype.Save(...) dict
+    return call(function('s:MruStore'), [self.mru] + a:000)
+endf
+
+function! s:tmruobj_prototype.Find(filename) dict
+    let filename = s:NormalizeFilename(a:filename)
+    let idx = 0
+    for item in self.mru
+        if item[0] == filename
+            return [idx, item]
         endif
-        call s:SetFilenameIndicators(a:world, self.mru)
-    endf
-    function! tmruobj.FilenameIndex(filenames, filename) "{{{3
-        return index(a:filenames, a:filename, 0, g:tmru_ignorecase)
-    endf
+        let idx += 1
+    endfor
+    return [-1, []]
+endf
+
+function! s:tmruobj_prototype.Set(idx, item) dict
+    let self.mru[a:idx] = a:item
+endf
+
+function! s:tmruobj_prototype.Get(idx) dict
+    return self.mru[a:idx]
+endf
+
+function! s:tmruobj_prototype.SetBase(world) dict
+    let a:world.base = self.GetFilenames()
+    if g:tmru#display_relative_filename
+        let basedir = getcwd()
+        let a:world.base = map(a:world.base, 'tlib#file#Relative(v:val, basedir)')
+    endif
+    call tmru#SetFilenameIndicators(a:world, self.mru)
+endf
+
+function! s:tmruobj_prototype.FilenameIndex(filenames, filename) "{{{3
+    return index(a:filenames, a:filename, 0, g:tmru_ignorecase)
+endf
+
+
+function! TmruObj(...) "{{{3
+    let tmruobj = copy(s:tmruobj_prototype)
     call call(tmruobj.Update, a:000, tmruobj)
     return tmruobj
 endf
@@ -223,29 +251,6 @@ function! s:MruRetrieve(...)
 endf
 
 
-function! s:SetFilenameIndicators(world, mru) "{{{3
-    let a:world.filename_indicators = {}
-    let idx = 0
-    for item in a:mru
-        let [filename, props] = item
-        let indicators = []
-        if get(props, 'sticky', 0)
-            call add(indicators, "s")
-        endif
-        let sessions = get(props, 'sessions', [])
-        if !empty(sessions)
-            call add(indicators, '-'. join(sessions, '-'))
-        endif
-        if !empty(indicators)
-            let fname = g:tmru#display_relative_filename ? a:world.base[idx] : filename
-            " TLogVAR fname, indicators
-            let a:world.filename_indicators[fname] = join(indicators, '')
-        endif
-        let idx += 1
-    endfor
-endf
-
-
 function! s:BuildMenu(initial) "{{{3
     if !empty(g:tmruMenu)
         if !a:initial
@@ -289,12 +294,12 @@ function! s:MruStore(mru, ...)
     endif
     if tmru_list != s:tmru_list
         let s:tmru_list = deepcopy(tmru_list)
-        " TLogVAR g:TMRU
-        " TLogVAR g:tmru_file
         if !get(props, 'exit', 0)
             call s:BuildMenu(0)
         endif
+        " TLogVAR g:tmru_file
         if empty(g:tmru_file)
+            " TLogVAR g:TMRU
             if g:tmru_update_viminfo
                 let g:TMRU = join(map(s:tmru_list, 'v:val[0]'), "\n")
                 wviminfo
@@ -387,7 +392,11 @@ endf
 
 augroup tmru
     autocmd!
-    autocmd VimEnter * call s:BuildMenu(1)
+    if has('vim_starting')
+        autocmd VimEnter * call s:BuildMenu(1)
+    else
+        call s:BuildMenu(1)
+    endif
     for [s:event, s:props] in items(g:tmru_events)
         exec 'autocmd '. s:event .' * call s:RegisterFile(expand("<afile>:p"), '. string(s:event) .', '. string(s:props) .')'
     endfor
@@ -414,11 +423,6 @@ if g:tmru_sessions > 0
     " This command is only available if g:tmru_sessions > 0.
     command! -nargs=? TRecentlyUsedFilesSessions call tmru#Session(<q-args>, TmruObj().mru)
 
-    autocmd tmru VimLeave * 
-                \ let s:tmruobj = TmruObj() |
-                \ let s:tmruobj.mru = map(deepcopy(s:tmruobj.mru), 'tmru#SetSessions(v:val)') |
-                \ call s:tmruobj.Save({'exit': 1}) |
-                \ unlet s:tmruobj
-
+    autocmd tmru VimLeave * call tmru#Leave()
 endif
 
