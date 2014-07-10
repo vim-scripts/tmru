@@ -3,8 +3,8 @@
 " @Website:     http://www.vim.org/account/profile.php?user_id=4037
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     2007-04-13.
-" @Last Change: 2014-01-16.
-" @Revision:    901
+" @Last Change: 2014-02-05.
+" @Revision:    911
 " GetLatestVimScripts: 1864 1 tmru.vim
 
 if &cp || exists("loaded_tmru")
@@ -14,7 +14,10 @@ if !exists('loaded_tlib') || loaded_tlib < 106
     echoerr "tlib >= 1.06 is required"
     finish
 endif
-let loaded_tmru = 102
+let loaded_tmru = 103
+
+let s:save_cpo = &cpo
+set cpo&vim
 
 
 if !exists("g:tmruMenu")
@@ -42,8 +45,10 @@ endif
 
 
 if !exists('g:tmru#display_relative_filename')
-    " If true, display the relative filename. This requires 
-    " |g:tlib#input#format_filename| to be set to "r".
+    " If true, display the relative filename.
+    "
+    " If this options is used with |g:tlib#input#format_filename| set to 
+    " "l", |g:tlib_inputlist_filename_indicators| doesn't work.
     let g:tmru#display_relative_filename = 0   "{{{2
 endif
 
@@ -88,7 +93,7 @@ if !exists("g:tmru_events")
         unlet g:tmruEvents
     else
         let g:tmru_events = {
-                    \ 'VimLeave':     {'load': 0, 'register': 0, 'save': g:tmru_single_instance_mode, 'exit': 1},
+                    \ 'VimLeave':     {'load': 0, 'register': 0, 'save': 1, 'exit': 1},
                     \ 'FocusGained':  {'load': 1, 'register': 0, 'save': !g:tmru_single_instance_mode},
                     \ 'FocusLost':    {'load': 0, 'register': 0, 'save': !g:tmru_single_instance_mode},
                     \ 'BufWritePost': {'load': 0, 'register': 1, 'save': !g:tmru_single_instance_mode},
@@ -135,6 +140,7 @@ if !exists("g:tmruExclude") "{{{2
                 \ . '\|'. s:PS .'quickfix$'
                 \ . '\|__.\{-}__$'
                 \ . '\|^fugitive:'
+                \ . '\|/truecrypt\d\+/'
                 \ . '\|' . substitute(escape(&suffixes, '~.*$^'), '\\\@<!,', '$\\|', 'g') .'$' " &suffixes, ORed (split on (not escaped) comma)
     unlet s:PS
 endif
@@ -286,12 +292,14 @@ endf
 function! s:MruStore(mru, ...)
     " TLogVAR g:tmru_file
     let props = a:0 >= 1 ? a:1 : {}
-    let tmru_list = s:MruSort(a:mru)[0 : g:tmruSize]
+    let tmru_list = a:mru
     if get(props, 'exit', 0)
+        let tmru_list = s:MruSort(tmru_list)
         " echom "DBG tmru_list != s:tmru_list" (tmru_list != s:tmru_list)
         " echom "DBG tmru_list != s:tmru_list" (string(tmru_list) != string(s:tmru_list))
         " echom "DBG tmru_list" string(filter(copy(tmru_list), 'has_key(v:val[1], "sessions")'))
     endif
+    let tmru_list = tmru_list[0 : g:tmruSize]
     if tmru_list != s:tmru_list
         let s:tmru_list = deepcopy(tmru_list)
         if !get(props, 'exit', 0)
@@ -332,11 +340,17 @@ endf
 
 
 function! s:MruSorter(i1, i2) "{{{3
-    let s1 = get(a:i1[1], 'sticky', 0)
-    let s2 = get(a:i2[1], 'sticky', 0)
-    let p1 = get(a:i1[1], 'pos')
-    let p2 = get(a:i2[1], 'pos')
-    return s1 == s2 ? (p1 == p2 ? 0 : p1 > p2 ? 1 : -1) : s1 > s2 ? -1 : 1
+    let i11 = a:i1[1]
+    let i21 = a:i2[1]
+    let s1 = get(i11, 'sticky', 0)
+    let s2 = get(i21, 'sticky', 0)
+    if s1 == s2
+        let p1 = get(i11, 'pos')
+        let p2 = get(i21, 'pos')
+        return p1 == p2 ? 0 : p1 > p2 ? 1 : -1
+    else
+        return s1 > s2 ? -1 : 1
+    endif
 endf
 
 
@@ -369,23 +383,59 @@ function! s:MruRegister(filename, props)
         return
     endif
     let tmruobj = TmruObj(get(a:props, 'load', 0))
-    let mru = copy(tmruobj.mru)
-    let filenames = tmruobj.GetFilenames()
-    let imru = tmruobj.FilenameIndex(filenames, filename)
+    let [oldpos, item] = TmruGetItem(tmruobj, filename)
+    let [must_update, mru] = TmruInsert(tmruobj, oldpos, item)
+    if must_update
+        let tmruobj.mru = mru
+        call tmruobj.Save(a:props)
+    endif
+endf
+
+
+function! TmruGetItem(tmruobj, filename) "{{{3
+    " TLogVAR a:filename
+    let filenames = a:tmruobj.GetFilenames()
+    let imru = a:tmruobj.FilenameIndex(filenames, a:filename)
     " TLogVAR imru
-    if imru != 0
-        if imru == -1
-            let item = [filename, {}]
-        else
-            let item = remove(mru, imru)
+    if imru == -1
+        let item = [a:filename, {}]
+    else
+        let item = get(a:tmruobj.mru, imru)
+    endif
+    " TLogVAR imru, item
+    return [imru, item]
+endf
+
+
+function! TmruInsert(tmruobj, oldpos, item) "{{{3
+    " TLogVAR a:oldpos, a:item
+    " echom "DBG" get(a:item[1], "sticky", 0)
+    let newpos = 0
+    if !get(a:item[1], 'sticky', 0)
+        for mruitem in a:tmruobj.mru
+            " TLogVAR mruitem
+            if get(mruitem[1], 'sticky', 0)
+                let newpos += 1
+            elseif mruitem[0] == a:item[0]
+            else
+                break
+            endif
+        endfor
+    endif
+    " TLogVAR newpos
+    if a:oldpos == newpos
+        return [0, a:tmruobj.mru]
+    else
+        let mru = copy(a:tmruobj.mru)
+        if a:oldpos != -1
+            if mru[a:oldpos] != a:item
+                throw 'TMRU: Inconsistent state'
+            endif
+            call remove(mru, a:oldpos)
         endif
-        " TLogVAR imru, item
-        call insert(mru, item)
-        if mru != tmruobj.mru
-            " TLogVAR mru
-            let tmruobj.mru = mru
-            call tmruobj.Save(a:props)
-        endif
+        call insert(mru, a:item, newpos)
+        " TLogVAR imru
+        return [mru != a:tmruobj.mru, mru]
     endif
 endf
 
@@ -426,3 +476,6 @@ if g:tmru_sessions > 0
     autocmd tmru VimLeave * call tmru#Leave()
 endif
 
+
+let &cpo = s:save_cpo
+unlet s:save_cpo
